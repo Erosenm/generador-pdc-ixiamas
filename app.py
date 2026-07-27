@@ -259,7 +259,7 @@ with st.form("form_pdc"):
         unidad = st.text_input("Unidad Educativa", value="IXIAMAS")
         nivel = st.selectbox("Nivel", options=["SECUNDARIA", "PRIMARIA"])
     with c2:
-        docente = st.text_input("Maestra/o (Ej: JUAN MAMANI)")
+        docente = st.text_input("Maestra/o (Ej: PEPE PEREZ)")
         ano = st.text_input("Año de Escolaridad (Ej: Tercero C)")
         trimestre = st.selectbox("Trimestre", options=["PRIMERO", "SEGUNDO", "TERCERO"], index=1)
     with c3:
