@@ -16,15 +16,15 @@ try:
 except Exception:
     Groq = None
 
-st.set_page_config(page_title="Generador de Planes Curriculares - Ixiamas", layout="wide")
+st.set_page_config(page_title="Generador de Planes Curriculares", layout="wide")
 
-# --- Helpers de Configuración de Word ---
+# --- Helpers de Configuración ---
 def get_groq_client():
     api_key = st.secrets.get("GROQ_API_KEY")
     if not api_key:
-        raise RuntimeError("Falta la clave de API en los secretos (ej. 'GROQ_API_KEY').")
+        raise RuntimeError("Falta la clave de API en los secretos.")
     if Groq is None:
-        raise RuntimeError("No se pudo importar `groq`. Revisa el archivo requirements.txt.")
+        raise RuntimeError("No se pudo importar `groq`.")
     return Groq(api_key=api_key)
 
 def extract_json_from_text(text):
@@ -44,7 +44,7 @@ def extract_json_from_text(text):
                 continue
     raise ValueError("No se pudo extraer JSON válido de la respuesta de IA.")
 
-def set_cell_bg(cell, color_hex="D9E2F3"): # Color celeste/grisáceo
+def set_cell_bg(cell, color_hex="D9E2F3"):
     tcPr = cell._tc.get_or_add_tcPr()
     shd = OxmlElement('w:shd')
     shd.set(qn('w:val'), 'clear')
@@ -52,33 +52,53 @@ def set_cell_bg(cell, color_hex="D9E2F3"): # Color celeste/grisáceo
     shd.set(qn('w:fill'), color_hex)
     tcPr.append(shd)
 
-def build_prompt(tema, semanas, nivel, contexto_extra=""):
+def insert_formatted_text(cell, text):
+    """Busca palabras clave y las pone en negrita automáticamente"""
+    if not text:
+        return
+    p = cell.paragraphs[0] if cell.paragraphs else cell.add_paragraph()
+    # Palabras a poner en negrita (Solo SER, SABER, HACER)
+    keywords = [r"Lectura:", r"Práctica:", r"Teoría:", r"Valoración:", r"Producción:", r"SER:", r"SABER:", r"HACER:"]
+    pattern = '(' + '|'.join(keywords) + ')'
+    
+    parts = re.split(pattern, text)
+    for part in parts:
+        run = p.add_run(part)
+        if part in [k.replace("\\", "") for k in keywords]:  
+            run.bold = True
+        run.font.name = 'Arial'
+        run.font.size = Pt(9)
+
+def build_prompt(tema, semanas, nivel, area, puntos_clave):
     weeks = int(semanas)
+    instruccion_extra = f"\nEl profesor solicita que incluyas estos puntos clave o enfoques: {puntos_clave}" if puntos_clave else ""
+    
     prompt = f"""
-Actúa como un pedagogo boliviano experto en diseño curricular del Ministerio de Educación. 
+Actúa como un pedagogo boliviano experto en diseño curricular. 
 Genera un Plan de Desarrollo Curricular (PDC) formal y riguroso.
 
 Tema a desarrollar: "{tema}"
+Área: "{area}"
 Nivel educativo: "{nivel}"
 Duración: {weeks} semanas.
-Contexto socio-comunitario: Municipio de Ixiamas, Norte de La Paz.
+Contexto socio-comunitario: Municipio de Ixiamas, Norte de La Paz.{instruccion_extra}
 
 Devuelve ÚNICAMENTE un objeto JSON válido con la siguiente estructura exacta:
 
 {{
-  "objetivo_holistico_nivel": "Redacta el objetivo general del nivel según la Ley 070 (Ser, Saber, Hacer, Decidir), mencionando valores sociocomunitarios.",
-  "objetivo_aprendizaje": "Redacta el objetivo específico para este tema (Ser, Saber, Hacer, Decidir).",
+  "objetivo_holistico_nivel": "Redacta el objetivo general del nivel (Ser, Saber, Hacer). Párrafo continuo.",
+  "objetivo_aprendizaje": "Redacta el objetivo específico para este tema.",
   "semanas": [
     {{
       "semana": 1,
-      "contenidos": "Subtítulo o contenido específico a avanzar.",
-      "momentos": "Lectura: 10 minutos de lectura... Práctica: ... Teoría: ... Valoración: ... Producción: ... (Redacta en un solo bloque continuo sin viñetas)",
-      "recursos": "Lista de materiales (educativos, analógicos, de la vida). Incluye recursos de Ixiamas.",
+      "contenidos": "Subtítulo o contenido a avanzar.",
+      "momentos": "Lectura: 10 minutos... Práctica: ... Teoría: ... Valoración: ... Producción: ...",
+      "recursos": "Lista de materiales. Incluye recursos de Ixiamas.",
       "periodos": "2",
-      "criterios_evaluacion": "SER:\\n- Valora...\\nSABER:\\n- Identifica...\\nHACER:\\n- Elabora...\\nDECIDIR:\\n- Promueve..."
+      "criterios_evaluacion": "SER:\\n- Valora...\\nSABER:\\n- Identifica...\\nHACER:\\n- Elabora..."
     }}
   ],
-  "adaptaciones_curriculares": "Redacta un párrafo sobre cómo se adaptará el contenido para estudiantes con dificultades de aprendizaje."
+  "adaptaciones_curriculares": "Párrafo sobre adaptaciones para estudiantes con dificultades."
 }}
 Genera exactamente {weeks} objetos dentro del arreglo "semanas".
 """
@@ -87,55 +107,52 @@ Genera exactamente {weeks} objetos dentro del arreglo "semanas".
 def generar_docx(datos_formulario, plan_json):
     doc = Document()
     
-    # 1. Configuración de estilos e idioma Español (Adiós líneas rojas)
     style = doc.styles['Normal']
     font = style.font
     font.name = 'Arial'
     font.size = Pt(10)
     
-    # Forzar el idioma a Español para el corrector ortográfico
+    # Forzar idioma Español
     rPr = font.element.get_or_add_rPr()
     lang = OxmlElement('w:lang')
     lang.set(qn('w:val'), 'es-ES')
     rPr.append(lang)
 
-    # 2. Configurar hoja a Carta y Horizontal (Landscape)
+    # Configurar hoja a Carta y Horizontal
     for section in doc.sections:
         section.orientation = WD_ORIENT.LANDSCAPE
-        section.page_width = Inches(11.0)  # Tamaño Carta a lo ancho
-        section.page_height = Inches(8.5)  # Tamaño Carta a lo alto
+        section.page_width = Inches(11.0)
+        section.page_height = Inches(8.5)
         section.top_margin = Inches(0.5)
         section.bottom_margin = Inches(0.5)
         section.left_margin = Inches(0.5)
         section.right_margin = Inches(0.5)
 
-    # Título Principal
+    # Títulos
     p_titulo = doc.add_paragraph()
     p_titulo.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
     run_t1 = p_titulo.add_run("PLAN DE DESARROLLO CURRICULAR PARA EDUCACIÓN SECUNDARIA COMUNITARIA PRODUCTIVA\n")
     run_t1.bold = True
     run_t1.font.size = Pt(11)
     
-    # Número de plan dinámico
     run_t2 = p_titulo.add_run(f"PLAN DE DESARROLLO CURRICULAR Nº {datos_formulario.get('nro_plan', '1')}")
     run_t2.bold = True
     run_t2.font.size = Pt(11)
 
-    # Subtítulo 1. Datos referenciales
     p_datos = doc.add_paragraph()
-    run_datos = p_datos.add_run("1.  Datos referenciales")
-    run_datos.bold = True
+    p_datos.add_run("1.  Datos referenciales").bold = True
 
-    # --- TABLA DE DATOS REFERENCIALES ---
+    # --- TABLA DE DATOS REFERENCIALES (Anchos fijos para que no se estire de más) ---
     t_datos = doc.add_table(rows=5, cols=4)
     t_datos.style = 'Table Grid'
     t_datos.autofit = False
     
+    # Ancho total: 9 pulgadas (centrado visualmente)
     for row in t_datos.rows:
-        row.cells[0].width = Inches(1.8)
-        row.cells[1].width = Inches(3.2)
-        row.cells[2].width = Inches(1.8)
-        row.cells[3].width = Inches(3.2)
+        row.cells[0].width = Inches(1.5)
+        row.cells[1].width = Inches(3.0)
+        row.cells[2].width = Inches(1.5)
+        row.cells[3].width = Inches(3.0)
 
     def set_cell_bold(cell, text):
         cell.text = text
@@ -158,80 +175,86 @@ def generar_docx(datos_formulario, plan_json):
     t_datos.cell(2,1).merge(t_datos.cell(2,3))
 
     set_cell_bold(t_datos.cell(3,0), "Área")
-    t_datos.cell(3,1).text = "ARTES PLÁSTICAS Y VISUALES" # Puedes cambiar esto a un campo dinámico si quieres
+    t_datos.cell(3,1).text = datos_formulario.get("area", "").upper() 
     t_datos.cell(3,1).merge(t_datos.cell(3,3))
 
     set_cell_bold(t_datos.cell(4,0), "Trimestre")
     t_datos.cell(4,1).text = datos_formulario.get("trimestre", "").upper()
     t_datos.cell(4,1).merge(t_datos.cell(4,3))
     
-    # Agregar fila extra para la FECHA (que ahora será con formato bonito)
     row_fecha = t_datos.add_row()
     set_cell_bold(row_fecha.cells[0], "FECHA")
     row_fecha.cells[1].text = datos_formulario.get("fechas", "").upper()
     row_fecha.cells[1].merge(row_fecha.cells[3])
 
-    # Un párrafo limpio y vacío para separar tablas (evita que se peguen o formen recuadros raros)
     doc.add_paragraph("") 
 
-    # Subtítulo 2. Desarrollo (Fuera del recuadro)
+    # --- 2. DESARROLLO Y OBJETIVO HOLÍSTICO (FUERA DE LA TABLA) ---
     p_des = doc.add_paragraph()
-    run_des = p_des.add_run("2.  Desarrollo")
-    run_des.bold = True
+    p_des.add_run("2.  Desarrollo\n").bold = True
+    p_des.add_run("Objetivo holístico de nivel\n").bold = True
+    p_des.add_run(plan_json.get("objetivo_holistico_nivel", ""))
 
-    # --- TABLA PRINCIPAL DEL PLAN ---
+    # --- TABLA PRINCIPAL (6 COLUMNAS) ---
     semanas = plan_json.get("semanas", [])
     num_semanas = len(semanas)
-    total_filas = 3 + num_semanas + 1
-    t_plan = doc.add_table(rows=total_filas, cols=5)
+    
+    # Filas: 1 de cabeceras + N semanas + 1 adaptaciones
+    t_plan = doc.add_table(rows=(1 + num_semanas + 1), cols=6)
     t_plan.style = 'Table Grid'
+    t_plan.autofit = False
 
-    # Fila 0 y 1: Objetivos
-    cell_oh = t_plan.cell(0,0)
-    p_oh = cell_oh.paragraphs[0]
-    p_oh.add_run("Objetivo holístico de nivel\n").bold = True
-    p_oh.add_run(plan_json.get("objetivo_holistico_nivel", ""))
-    cell_oh.merge(t_plan.cell(0,4))
+    # Definir anchos para que quepa en la hoja horizontal (Total 10 pulgadas)
+    anchos = [Inches(1.3), Inches(1.5), Inches(2.5), Inches(1.5), Inches(0.7), Inches(2.5)]
 
-    cell_oa = t_plan.cell(1,0)
-    p_oa = cell_oa.paragraphs[0]
-    p_oa.add_run("Objetivo de aprendizaje\n").bold = True
-    p_oa.add_run(plan_json.get("objetivo_aprendizaje", ""))
-    cell_oa.merge(t_plan.cell(1,4))
-
-    # Fila 2: Cabeceras con fondo celeste
-    cabeceras = ["Contenidos", "Momentos del proceso formativo", "Recursos", "Períodos", "Criterios de evaluación"]
+    # Fila 0: Cabeceras con fondo celeste
+    cabeceras = ["Objetivo de aprendizaje", "Contenidos", "Momentos del proceso formativo", "Recursos", "Períodos", "Criterios de evaluación"]
     for i, txt in enumerate(cabeceras):
-        celda = t_plan.cell(2,i)
-        set_cell_bg(celda, "D9E2F3") # Fondo celeste claro
+        celda = t_plan.cell(0,i)
+        celda.width = anchos[i]
+        set_cell_bg(celda, "D9E2F3")
         p = celda.paragraphs[0]
         p.add_run(txt).bold = True
         p.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
-    # Filas de Semanas (Fila 3 en adelante)
-    fila_actual = 3
+    # Filas de Semanas
     for idx, s in enumerate(semanas):
-        p_cont = t_plan.cell(fila_actual, 0).paragraphs[0]
+        fila_actual = idx + 1
+        
+        # Ajustar anchos de las celdas de la fila
+        for col_idx in range(6):
+            t_plan.cell(fila_actual, col_idx).width = anchos[col_idx]
+
+        # Col 0: Objetivo de Aprendizaje (se llena solo en la primera semana y luego se fusionará)
+        if idx == 0:
+            t_plan.cell(fila_actual, 0).text = plan_json.get("objetivo_aprendizaje", "")
+            
+        # Col 1: Contenidos
+        celda_cont = t_plan.cell(fila_actual, 1)
+        p_cont = celda_cont.paragraphs[0]
         p_cont.add_run(f"Semana {s.get('semana', idx+1)}\n").bold = True
         p_cont.add_run(s.get("contenidos", ""))
         
-        t_plan.cell(fila_actual, 1).text = s.get("momentos", "")
-        t_plan.cell(fila_actual, 2).text = s.get("recursos", "")
-        t_plan.cell(fila_actual, 3).text = str(s.get("periodos", ""))
+        # Col 2, 3, 4, 5 (Usamos la función que pone negritas automáticamente)
+        insert_formatted_text(t_plan.cell(fila_actual, 2), s.get("momentos", ""))
+        insert_formatted_text(t_plan.cell(fila_actual, 3), s.get("recursos", "").replace("\\n", "\n"))
         
-        # Aplicamos la viñeta con saltos de linea para los criterios
-        t_plan.cell(fila_actual, 4).text = s.get("criterios_evaluacion", "").replace("\\n", "\n")
-        
-        fila_actual += 1
+        t_plan.cell(fila_actual, 4).text = str(s.get("periodos", ""))
+        insert_formatted_text(t_plan.cell(fila_actual, 5), s.get("criterios_evaluacion", "").replace("\\n", "\n"))
+
+    # Fusionar la columna del Objetivo de Aprendizaje hacia abajo si hay más de 1 semana
+    if num_semanas > 1:
+        t_plan.cell(1, 0).merge(t_plan.cell(num_semanas, 0))
 
     # Última fila: Adaptaciones
-    cell_adapt = t_plan.cell(fila_actual, 0)
+    fila_adapt = num_semanas + 1
+    cell_adapt = t_plan.cell(fila_adapt, 0)
     p_adapt = cell_adapt.paragraphs[0]
     p_adapt.add_run("Adaptaciones curriculares:\n").bold = True
     p_adapt.add_run(plan_json.get("adaptaciones_curriculares", ""))
-    cell_adapt.merge(t_plan.cell(fila_actual, 4))
+    cell_adapt.merge(t_plan.cell(fila_adapt, 5))
 
-    # Dar formato (letra tamaño 9 para que todo entre bien en la tabla)
+    # Asegurar fuente Arial tamaño 9 en toda la tabla
     for row in t_plan.rows:
         for cell in row.cells:
             for paragraph in cell.paragraphs:
@@ -247,24 +270,25 @@ def generar_docx(datos_formulario, plan_json):
     return bio
 
 # --- Interfaz Streamlit ---
-st.title("Generador de Planes Curriculares - Ixiamas")
+st.title("Generador de Planes Curriculares")
 
-MESES_ESPANOL = {1:"JUNIO", 2:"FEBRERO", 3:"MARZO", 4:"ABRIL", 5:"MAYO", 6:"JUNIO", 7:"JULIO", 8:"AGOSTO", 9:"SEPTIEMBRE", 10:"OCTUBRE", 11:"NOVIEMBRE", 12:"DICIEMBRE"}
+MESES_ESPANOL = {1:"ENERO", 2:"FEBRERO", 3:"MARZO", 4:"ABRIL", 5:"MAYO", 6:"JUNIO", 7:"JULIO", 8:"AGOSTO", 9:"SEPTIEMBRE", 10:"OCTUBRE", 11:"NOVIEMBRE", 12:"DICIEMBRE"}
 
 with st.form("form_pdc"):
     st.subheader("Datos referenciales")
     c1, c2, c3 = st.columns(3)
     with c1:
         nro_plan = st.number_input("Nº de Plan Curricular", min_value=1, value=5, step=1)
-        unidad = st.text_input("Unidad Educativa", value="IXIAMAS")
+        unidad = st.text_input("Unidad Educativa", value="GERMÁN BUSCH")
         nivel = st.selectbox("Nivel", options=["SECUNDARIA", "PRIMARIA"])
+        area = st.text_input("Área (Ej: Artes Plásticas y Visuales)", value="ARTES PLÁSTICAS Y VISUALES")
     with c2:
-        docente = st.text_input("Maestra/o (Ej: PEPE PEREZ)")
-        ano = st.text_input("Año de Escolaridad (Ej: Tercero C)")
+        docente = st.text_input("Maestra/o", value="PEPE PÉREZ")
+        ano = st.text_input("Año de Escolaridad", value="Quinto B")
         trimestre = st.selectbox("Trimestre", options=["PRIMERO", "SEGUNDO", "TERCERO"], index=1)
+        semanas = st.selectbox("Semanas de duración", options=[1,2,3,4], index=1)
     with c3:
         tema = st.text_input("El Tema a avanzar", placeholder="Ej: La calidad de imagen...")
-        semanas = st.selectbox("Semanas de duración", options=[1,2,3,4], index=3)
         st.write("Rango de Fechas")
         f1, f2 = st.columns(2)
         with f1:
@@ -272,13 +296,14 @@ with st.form("form_pdc"):
         with f2:
             fecha_fin = st.date_input("Hasta")
             
+    puntos_clave = st.text_area("Puntos clave o enfoques específicos (Opcional)", placeholder="Escribe aquí si quieres que la IA se enfoque en algo específico. Ej: Quiero que en la Práctica hagamos maquetas con material reciclado de la zona.")
+            
     submitted = st.form_submit_button("Generar Plan en Word")
 
 if submitted:
     if not tema or tema.strip() == "":
         st.error("Por favor ingrese el campo 'El Tema a avanzar'.")
     else:
-        # Formatear la fecha como: DEL 1 DE JUNIO AL 26 DE JUNIO DE 2026
         mes_ini = MESES_ESPANOL.get(fecha_inicio.month, "ENERO")
         mes_fin = MESES_ESPANOL.get(fecha_fin.month, "ENERO")
         cadena_fechas = f"DEL {fecha_inicio.day} DE {mes_ini} AL {fecha_fin.day} DE {mes_fin} DE {fecha_fin.year}"
@@ -289,27 +314,20 @@ if submitted:
             "nivel": nivel,
             "ano": ano,
             "docente": docente,
+            "area": area,
             "trimestre": trimestre,
             "fechas": cadena_fechas,
-            "tema": tema,
-            "semanas": semanas
         }
 
         try:
-            with st.spinner("Conectando con la IA ultra-rápida y estructurando tablas..."):
+            with st.spinner("Creando estructura de 6 columnas y procesando textos..."):
                 client = get_groq_client()
-                prompt = build_prompt(tema=tema, semanas=semanas, nivel=nivel)
+                prompt = build_prompt(tema=tema, semanas=semanas, nivel=nivel, area=area, puntos_clave=puntos_clave)
 
                 response = client.chat.completions.create(
                     messages=[
-                        {
-                            "role": "system",
-                            "content": "Eres un asistente experto. Debes responder ÚNICAMENTE con formato JSON válido."
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
+                        {"role": "system", "content": "Eres un asistente experto. Debes responder ÚNICAMENTE con formato JSON válido."},
+                        {"role": "user", "content": prompt}
                     ],
                     model="llama-3.3-70b-versatile",
                     temperature=0.2,
@@ -319,11 +337,11 @@ if submitted:
                 plan_json = extract_json_from_text(text)
                 docx_bio = generar_docx(datos_form, plan_json)
 
-                st.success("¡Plan generado correctamente!")
+                st.success("¡Plan generado exitosamente!")
                 now_name = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"PDC_{unidad}_{tema[:10]}_{now_name}.docx"
                 st.download_button(
-                    label="📥 Descargar Plan_Curricular.docx",
+                    label="📥 Descargar Plan Curricular",
                     data=docx_bio.getvalue(),
                     file_name=filename,
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -331,5 +349,5 @@ if submitted:
 
         except Exception as e:
             st.error(f"Ocurrió un error: {e}")
-            with st.expander("Detalles del error (depuración)"):
+            with st.expander("Detalles del error"):
                 st.exception(e)
