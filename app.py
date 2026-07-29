@@ -17,7 +17,6 @@ except Exception:
 
 st.set_page_config(page_title="Generador de Planes Curriculares", layout="wide")
 
-# --- Helpers de Configuración ---
 def get_groq_client():
     api_key = st.secrets.get("GROQ_API_KEY")
     if not api_key:
@@ -50,12 +49,10 @@ def set_cell_bg(cell, color_hex="D9E2F3"):
     tcPr.append(shd)
 
 def insert_markdown_text(cell, text, append=False, align_justify=False):
-    """Procesa textos con **negrita** y *cursiva* generados por la IA"""
     if not text:
         return
     
     if not append:
-        # Limpiar párrafos existentes (para evitar espacios en blanco al inicio)
         for p in cell.paragraphs:
             p._element.getparent().remove(p._element)
             
@@ -67,7 +64,6 @@ def insert_markdown_text(cell, text, append=False, align_justify=False):
         if align_justify:
             p.alignment = WD_PARAGRAPH_ALIGNMENT.JUSTIFY
             
-        # Detectar ***negrita y cursiva***, **negrita**, o *cursiva*
         tokens = re.split(r'(\*\*\*.*?\*\*\*|\*\*.*?\*\*|\*.*?\*)', para_text)
         for token in tokens:
             if not token:
@@ -92,50 +88,57 @@ def build_prompt(tema, semanas, nivel, area, puntos_clave):
     weeks = int(semanas)
     instruccion_extra = f"Puntos clave solicitados por el docente: {puntos_clave}" if puntos_clave else ""
     
-    # Reglas dinámicas según el nivel
     if nivel == "PRIMARIA":
         reglas_nivel = """
-        - Contenidos: Escribe "***Semana X***" (en negrita y cursiva), salto de línea, TÍTULO EN MAYÚSCULAS, salto de línea, y viñetas (•) con los conceptos.
-        - Recursos: Como es Primaria, repite los mismos recursos lógicos en todas las semanas (ej. Cuadernos de apuntes, Billetes de alasitas, etc.).
+        - Contenidos: Escribe "***Semana X***" (en negrita y cursiva), salto de línea, TÍTULO EN MAYÚSCULAS, salto de línea, y viñetas (•) detalladas con los conceptos clave de la semana.
+        - Recursos: Repite recursos lógicos y consistentes acordes a primaria (ej. Cuadernos de apuntes, materiales escolares y de apoyo didáctico de la región).
         """
     else:
         reglas_nivel = """
-        - Contenidos: Formato estándar. Escribe "**Semana X**", luego el tema y los conceptos clave.
+        - Contenidos: Formato técnico avanzado. Escribe "**Semana X**", luego el tema y los conceptos técnicos correspondientes.
         """
 
     prompt = f"""
-Actúa como un pedagogo boliviano experto en diseño curricular. 
-Genera un Plan de Desarrollo Curricular (PDC) formal.
+Actúa como un pedagogo boliviano experto en diseño curricular del Ministerio de Educación. 
+Debes redactar un Plan de Desarrollo Curricular (PDC) EXTREMADAMENTE DETALLADO, EXTENSO Y PEDAGÓGICAMENTE RICO. 
+ESTÁ ESTRICTAMENTE PROHIBIDO GENERAR TEXTOS CORTOS, RESÚMENES O FRASES ROBÓTICAS.
 
 Tema a desarrollar: "{tema}"
 Área: "{area}"
 Nivel educativo: "{nivel}"
 Duración: {weeks} semanas.
-Contexto: Municipio de Ixiamas, Norte de La Paz. {instruccion_extra}
+Contexto regional: Municipio de Ixiamas, Norte de La Paz. {instruccion_extra}
 
-REGLAS ESTRICTAS DE REDACCIÓN (Usa Markdown para el formato):
-- Objetivo de Aprendizaje: Usa **negrita** para resaltar 4 a 5 palabras clave de acción o propósito (ej. **Fortalecemos**, **analizando**, **a través de**).
-- Criterios de Evaluación: Genera un SOLO bloque global para todo el plan. Usa solo SER, SABER y HACER. Formato: **SER:**\\n- ...\\n**SABER:**\\n- ...\\n**HACER:**\\n- ...
-- Momentos del proceso formativo: NO uses tiempos genéricos (como 'Lectura 10 minutos' o 'Práctica 20 min'). Redacta actividades basadas en la experiencia. Al final de cada oración o actividad, indica el momento en negrita y entre paréntesis: **(Práctica).**, **(Teoría).**, **(Producción).** o **(Valoración).**
+REGLAS ESTRICTAS DE CONTENIDO (CRÍTICAS PARA APROBAR EL PLAN):
+1. Objetivo holístico de nivel: Debe ser un párrafo MUY EXTENSO (mínimo 45 palabras). Integra detalladamente SOLO LAS 3 DIMENSIONES: Ser, Saber y Hacer. ¡ESTÁ ESTRICTAMENTE PROHIBIDO MENCIONAR O INCLUIR "DECIDIR"! Explica cómo el tema transforma al estudiante y aporta a la comunidad.
+2. Objetivo de aprendizaje: Párrafo amplio y robusto (mínimo 50 palabras). Usa **negrita** para resaltar verbos de acción y conectores (ej. **Fortalecemos**, **asumiendo**, **a través del análisis**, **para promover**). 
+3. Momentos del proceso formativo (CRÍTICO): 
+   - ¡PROHIBIDO empezar todas las oraciones con "Los estudiantes..."! Usa una redacción fluida, en primera persona del plural (ej: Iniciamos con..., dialogamos sobre..., construimos...).
+   - Cada semana debe tener al menos 80 a 100 palabras en esta sección.
+   - Describe la **(Práctica)** partiendo desde la experiencia vivida o el contacto directo con la realidad, de forma muy descriptiva.
+   - Describe la **(Teoría)** como un análisis profundo, conceptualización y comprensión exhaustiva del tema.
+   - Describe la **(Producción)** especificando exactamente qué producto tangible, creativo o intelectual se va a elaborar.
+   - Describe la **(Valoración)** con una reflexión ética y comunitaria.
+4. Criterios de Evaluación: SOLO debes generar criterios para SER, SABER y HACER. NO generes criterios para decidir.
 {reglas_nivel}
 
-Devuelve ÚNICAMENTE un objeto JSON válido con esta estructura:
+Devuelve ÚNICAMENTE un objeto JSON válido con esta estructura exacta:
 {{
-  "objetivo_holistico_nivel": "Redacta el objetivo general del nivel.",
-  "objetivo_aprendizaje": "Redacta el objetivo específico usando las **negritas** pedidas.",
-  "criterios_evaluacion": "Un solo texto con los criterios globales de SER, SABER y HACER.",
+  "objetivo_holistico_nivel": "Párrafo muy extenso, profundo y articulado del objetivo de nivel (solo ser, saber, hacer)...",
+  "objetivo_aprendizaje": "Párrafo amplio y detallado con las **palabras clave** en negrita explicando el qué, cómo y para qué...",
+  "criterios_evaluacion": "**SER:**\\n- Detalle amplio 1\\n- Detalle amplio 2\\n**SABER:**\\n- Detalle amplio 1\\n- Detalle amplio 2\\n**HACER:**\\n- Detalle amplio 1\\n- Detalle amplio 2",
   "semanas": [
     {{
       "semana": 1,
       "contenidos": "...",
-      "momentos": "Actividad bien redactada **(Práctica)**. Actividad analítica **(Teoría)**...",
+      "momentos": "Iniciamos la sesión con un diálogo participativo sobre... para conectar con sus vivencias **(Práctica)**. Posteriormente, analizamos a profundidad los conceptos de... comprendiendo su funcionamiento en el entorno **(Teoría)**. Con estos saberes, elaboramos creativamente un... demostrando destreza técnica **(Producción)**. Finalmente, reflexionamos de manera comunitaria sobre la importancia de... para el bienestar de la región **(Valoración)**.",
       "recursos": "...",
       "periodos": "2"
     }}
   ],
-  "adaptaciones_curriculares": "Párrafo o viñetas sobre adaptaciones."
+  "adaptaciones_curriculares": "Párrafo extenso y detallado explicando estrategias específicas para estudiantes con dificultades de aprendizaje o talentos extraordinarios."
 }}
-Genera exactamente {weeks} objetos dentro de "semanas".
+Genera exactamente {weeks} objetos dentro del arreglo "semanas".
 """
     return prompt
 
@@ -160,7 +163,6 @@ def generar_docx(datos_formulario, plan_json):
         section.left_margin = Inches(0.5)
         section.right_margin = Inches(0.5)
 
-    # Título dinámico por nivel
     p_titulo = doc.add_paragraph()
     p_titulo.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
     if datos_formulario.get("nivel") == "PRIMARIA":
@@ -179,7 +181,6 @@ def generar_docx(datos_formulario, plan_json):
     p_datos = doc.add_paragraph()
     p_datos.add_run("1.  Datos referenciales").bold = True
 
-    # --- TABLA DE DATOS REFERENCIALES ---
     t_datos = doc.add_table(rows=5, cols=4)
     t_datos.style = 'Table Grid'
     t_datos.autofit = False
@@ -201,7 +202,6 @@ def generar_docx(datos_formulario, plan_json):
     set_cell_bold(t_datos.cell(0,2), "Unidad Educativa")
     t_datos.cell(0,3).text = datos_formulario.get("unidad", "")
 
-    # Nivel ajustado
     set_cell_bold(t_datos.cell(1,0), "Nivel")
     nivel_texto = "Primaria Comunitaria Vocacional" if datos_formulario.get("nivel") == "PRIMARIA" else "Secundaria Comunitaria Productiva"
     t_datos.cell(1,1).text = nivel_texto
@@ -227,17 +227,14 @@ def generar_docx(datos_formulario, plan_json):
 
     doc.add_paragraph("") 
 
-    # --- 2. DESARROLLO Y OBJETIVO HOLÍSTICO ---
     p_des = doc.add_paragraph()
     p_des.add_run("2.  Desarrollo\n").bold = True
     p_des.add_run("Objetivo holístico de nivel\n").bold = True
     p_des.add_run(plan_json.get("objetivo_holistico_nivel", ""))
 
-    # --- TABLA PRINCIPAL (MAGIA DE CELDAS FUSIONADAS) ---
     semanas = plan_json.get("semanas", [])
     num_semanas = len(semanas)
     
-    # Filas: 1 cabecera + N semanas + 1 adaptaciones = num_semanas + 2
     total_filas = num_semanas + 2
     t_plan = doc.add_table(rows=total_filas, cols=6)
     t_plan.style = 'Table Grid'
@@ -245,7 +242,6 @@ def generar_docx(datos_formulario, plan_json):
 
     anchos = [Inches(1.4), Inches(1.7), Inches(2.5), Inches(1.5), Inches(0.6), Inches(2.3)]
 
-    # Fila 0: Cabeceras
     cabeceras = ["Objetivo de aprendizaje", "Contenidos", "Momentos del proceso formativo", "Recursos", "Períodos", "Criterios de evaluación"]
     for i, txt in enumerate(cabeceras):
         celda = t_plan.cell(0,i)
@@ -255,7 +251,6 @@ def generar_docx(datos_formulario, plan_json):
         p.add_run(txt).bold = True
         p.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
-    # Filas de Semanas (Col 1 a 4)
     for idx, s in enumerate(semanas):
         fila_actual = idx + 1
         for col_idx in range(6):
@@ -269,11 +264,9 @@ def generar_docx(datos_formulario, plan_json):
         p_per.add_run(str(s.get("periodos", ""))).font.size = Pt(9)
         p_per.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
-    # Llenar Objetivos (Col 0) y Criterios (Col 5) en la Fila 1 antes de fusionar
     insert_markdown_text(t_plan.cell(1, 0), plan_json.get("objetivo_aprendizaje", ""), align_justify=True)
     insert_markdown_text(t_plan.cell(1, 5), plan_json.get("criterios_evaluacion", ""))
 
-    # Fila final: Adaptaciones curriculares
     fila_adapt = num_semanas + 1
     for col_idx in range(6):
         t_plan.cell(fila_adapt, col_idx).width = anchos[col_idx]
@@ -285,14 +278,8 @@ def generar_docx(datos_formulario, plan_json):
     run_ad.font.size = Pt(9)
     insert_markdown_text(cell_adapt_mid, plan_json.get("adaptaciones_curriculares", ""), append=True, align_justify=True)
 
-    # --- FUSIONAR CELDAS (LA CLAVE DEL FORMATO VISUAL) ---
-    # 1. Fusionar Adaptaciones SÓLO en las 4 columnas del medio (Col 1 a Col 4)
     t_plan.cell(fila_adapt, 1).merge(t_plan.cell(fila_adapt, 4))
-    
-    # 2. Fusionar Objetivo (Col 0) desde la Semana 1 hasta abarcar la fila de Adaptaciones
     t_plan.cell(1, 0).merge(t_plan.cell(fila_adapt, 0))
-    
-    # 3. Fusionar Criterios (Col 5) desde la Semana 1 hasta abarcar la fila de Adaptaciones
     t_plan.cell(1, 5).merge(t_plan.cell(fila_adapt, 5))
 
     bio = io.BytesIO()
@@ -300,7 +287,6 @@ def generar_docx(datos_formulario, plan_json):
     bio.seek(0)
     return bio
 
-# --- Interfaz Streamlit ---
 st.title("Generador de Planes Curriculares")
 
 MESES_ESPANOL = {1:"enero", 2:"febrero", 3:"marzo", 4:"abril", 5:"mayo", 6:"junio", 7:"julio", 8:"agosto", 9:"septiembre", 10:"octubre", 11:"noviembre", 12:"diciembre"}
@@ -335,7 +321,6 @@ if submitted:
     if not tema or tema.strip() == "":
         st.error("Por favor ingrese el campo 'El Tema a avanzar'.")
     else:
-        # Nuevo formato de fechas con puntitos
         mes_ini = MESES_ESPANOL.get(fecha_inicio.month, "enero")
         mes_fin = MESES_ESPANOL.get(fecha_fin.month, "enero")
         cadena_fechas = f"Del: ......................... {fecha_inicio.day} de {mes_ini} ......................... Al: ......... {fecha_fin.day} de {mes_fin} ......... del {fecha_fin.year} ............................................"
@@ -352,24 +337,24 @@ if submitted:
         }
 
         try:
-            with st.spinner("Creando estructura avanzada con formato para el Ministerio..."):
+            with st.spinner("Generando plan con textos ricos y detallados (exclusivo para Ser, Saber y Hacer)..."):
                 client = get_groq_client()
                 prompt = build_prompt(tema=tema, semanas=semanas, nivel=nivel, area=area, puntos_clave=puntos_clave)
 
                 response = client.chat.completions.create(
                     messages=[
-                        {"role": "system", "content": "Eres un asistente experto. Debes responder ÚNICAMENTE con formato JSON válido."},
+                        {"role": "system", "content": "Eres un pedagogo experto y detallista. Tu prioridad ABSOLUTA es generar textos largos, profundos y muy descriptivos. Responde ÚNICAMENTE con formato JSON."},
                         {"role": "user", "content": prompt}
                     ],
                     model="llama-3.3-70b-versatile",
-                    temperature=0.2,
+                    temperature=0.4, 
                 )
 
                 text = response.choices[0].message.content
                 plan_json = extract_json_from_text(text)
                 docx_bio = generar_docx(datos_form, plan_json)
 
-                st.success("¡Plan generado exitosamente con los nuevos formatos!")
+                st.success("¡Plan generado con contenido detallado, extenso y completo!")
                 now_name = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"PDC_{nivel}_{tema[:10]}_{now_name}.docx"
                 st.download_button(
