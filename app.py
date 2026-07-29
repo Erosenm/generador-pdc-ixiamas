@@ -110,8 +110,8 @@ Duración: {weeks} semanas.
 Contexto regional: Municipio de Ixiamas, Norte de La Paz. {instruccion_extra}
 
 REGLAS ESTRICTAS DE CONTENIDO (CRÍTICAS PARA APROBAR EL PLAN):
-1. Objetivo holístico de nivel: Debe ser un párrafo MUY EXTENSO (mínimo 45 palabras). Integra detalladamente SOLO LAS 3 DIMENSIONES: Ser, Saber y Hacer. ¡ESTÁ ESTRICTAMENTE PROHIBIDO MENCIONAR O INCLUIR "DECIDIR"! Explica cómo el tema transforma al estudiante y aporta a la comunidad.
-2. Objetivo de aprendizaje: Párrafo amplio y robusto (mínimo 50 palabras). Usa **negrita** para resaltar verbos de acción y conectores (ej. **Fortalecemos**, **asumiendo**, **a través del análisis**, **para promover**). 
+1. Objetivo holístico de nivel: Debe ser de almenos 4 lineas (mínimo 35 palabras).
+2. Objetivo de aprendizaje: Párrafo amplio , claro y entendible pero no redundante (mínimo 35 palabras). Usa **negrita** para resaltar verbos de acción y conectores (ej. **Fortalecemos**, **asumiendo**, **a través del análisis**, **para promover**). 
 3. Momentos del proceso formativo (CRÍTICO): 
    - ¡PROHIBIDO empezar todas las oraciones con "Los estudiantes..."! Usa una redacción fluida, en primera persona del plural (ej: Iniciamos con..., dialogamos sobre..., construimos...).
    - Cada semana debe tener al menos 80 a 100 palabras en esta sección.
@@ -136,7 +136,7 @@ Devuelve ÚNICAMENTE un objeto JSON válido con esta estructura exacta:
       "periodos": "2"
     }}
   ],
-  "adaptaciones_curriculares": "Párrafo extenso y detallado explicando estrategias específicas para estudiantes con dificultades de aprendizaje o talentos extraordinarios."
+  "adaptaciones_curriculares": "Párrafo de 5 lineas detallado explicando estrategias específicas para estudiantes con dificultades de aprendizaje o talentos extraordinarios."
 }}
 Genera exactamente {weeks} objetos dentro del arreglo "semanas".
 """
