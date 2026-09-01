@@ -346,7 +346,7 @@ if submitted:
                         {"role": "system", "content": "Eres un pedagogo experto y detallista. Tu prioridad ABSOLUTA es generar textos largos, profundos y muy descriptivos. Responde ÚNICAMENTE con formato JSON."},
                         {"role": "user", "content": prompt}
                     ],
-                    model="llama-3.1-8b-instant",
+                    model="openai/gpt-oss-120b",
                     temperature=0.4, 
                 )
 
